@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<Version>0.1.0</Version>
+		<Authors>KiriSoup</Authors>
+
+		<TargetFramework>net48</TargetFramework>
+		<LangVersion>preview</LangVersion>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+
+		<RootNamespace>$(MSBuildProjectName)</RootNamespace>
+    	<AssemblyName>$(RootNamespace)</AssemblyName>
+
+		<DefineConstants Condition="'$(Configuration)' == 'Debug'">DEBUG;TRACE</DefineConstants>
+		<DefineConstants Condition="'$(Configuration)' == 'Release'">RELEASE</DefineConstants>
+	</PropertyGroup>
+
+	<Import Project="..\..\tasks\DeployToGame.target" 
+		Condition=" '$(Configuration)' == 'Debug' "/>
+
+	<ItemGroup>
+		<PackageReference Include="PolySharp" Version="1.15.0" 
+			PrivateAssets="all" 
+			IncludeAssets="runtime; build; native; contentfiles; analyzers" />
+
+		<PackageReference Include="UnityEngine.Modules" Version="2017.4.13" 
+			IncludeAssets="compile" />
+
+		<PackageReference Include="BepInEx.Analyzers" Version="1.*" PrivateAssets="all" />
+		<PackageReference Include="BepInEx.Core" Version="5.*" />
+		<PackageReference Include="BepInEx.PluginInfoProps" Version="1.*" />
+
+		<PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.2" 
+			PrivateAssets="all" 
+			Condition="'$(TargetFramework.TrimEnd(`0123456789`))' == 'net'"/>
+	</ItemGroup>
+</Project>
