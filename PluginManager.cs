@@ -59,7 +59,7 @@ public sealed class PluginManager : MonoBehaviour
 			using var asmDef = AssemblyDefinition.ReadAssembly(path);
 			return LoadPlugins(asmDef);
 		} catch (Exception ex) {
-			Plugin.Logger.LogWarning($"error loading resource {name}: {ex.Message}");
+			Plugin.Logger.LogWarning($"error loading resource from path {path}: {ex.Message}");
 			return [];
 		}
 	}
@@ -71,7 +71,7 @@ public sealed class PluginManager : MonoBehaviour
 					$"Cannot load assemblyDefinition from {nameof(resource)}");
 			return LoadPlugins(asmDef);
 		} catch (Exception ex) {
-			Plugin.Logger.LogWarning($"error loading resource {name}: {ex.Message}");
+			Plugin.Logger.LogWarning($"error loading resource {resource}: {ex.Message}");
 			return [];
 		}
 	}

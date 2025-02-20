@@ -2,7 +2,7 @@
 global using UnityEngine;
 global using Object = UnityEngine.Object;
 using System.ComponentModel.Design.Serialization;
-using System.Reflection;
+using System.Diagnostics;
 using BepInEx;
 using BepInEx.Logging;
 
@@ -20,11 +20,11 @@ public sealed class Plugin : BaseUnityPlugin
     internal static new ManualLogSource Logger = null!;
 
 	internal event Action? OnUnload;
+	private AssemblyResolver? _resolver = new(); 
 
 	private Plugin() {
 		instance ??= this;
 		Logger ??= base.Logger;
-		AppDomain.CurrentDomain.AssemblyResolve += ResolveAssembly;
 	}
 
 	private void Awake() {
@@ -41,59 +41,9 @@ public sealed class Plugin : BaseUnityPlugin
 	}
 
 	private void OnDestroy() {
-		AppDomain.CurrentDomain.AssemblyResolve -= ResolveAssembly;
+		_resolver?.Dispose();
+		_resolver = null;
 		OnUnload?.Invoke();
-	}
-
-    public static Assembly? ResolveAssembly(object sender, ResolveEventArgs e)
-    {
-		if (e?.Name is null) return null;
-        var nameStr = e.Name;
-        var name = new AssemblyName(nameStr);
-
-		foreach (var asm in AppDomain.CurrentDomain.GetAssemblies()) {
-			var asmName = asm.GetName();
-			if (string.Equals(asmName.Name, name.Name,
-				StringComparison.InvariantCultureIgnoreCase)
-			) {
-				Logger.LogInfo($"Assembly '{asm.FullName}' already loaded, returning existing assembly");
-				return asm;
-			}
-			if (!(asm.GetCustomAttribute<ResolveFromResourcesAttribute>() is { 
-				ResourceNames: var resources
-			} )) {
-				continue;
-			}
-			foreach (var resource in asm.GetManifestResourceNames()
-				.Where(r => resources?.Remove(r) ?? true)
-			) {
-				using var stream = asm.GetManifestResourceStream(resource);
-				Assembly? embedAsm = null;
-				try {
-					byte[] buffer = new byte[stream.Length];
-					if (stream.Read(buffer, 0, buffer.Length) is 0) {
-						Logger.LogWarning($"skipping {resource} because resource is empty");
-						continue;
-					}
-					embedAsm = Assembly.Load(buffer);
-				} catch (BadImageFormatException) {
-					Logger.LogWarning($"skipping {resource} because resource is not a valid assembly");
-					continue;
-				} catch (Exception ex) {
-					Logger.LogWarning($"skipping {resource} because {ex}");
-					continue;
-				}
-				var embedAsmName = embedAsm.GetName();
-				if (string.Equals(embedAsmName.Name, name.Name,
-					StringComparison.InvariantCultureIgnoreCase)
-				) {
-					Logger.LogInfo($"Loading assembly '{embedAsmName}' into the current context");
-					PluginManager.Instance.LoadPlugins(stream);
-					return embedAsm;
-				}
-			}
-		}
-		return null;
 	}
 }
 
@@ -102,5 +52,5 @@ public class ResolveFromResourcesAttribute : Attribute
 {
 	public HashSet<string>? ResourceNames { get; } = null;
 
-	// public bool Always
+	// public bool 
 }
