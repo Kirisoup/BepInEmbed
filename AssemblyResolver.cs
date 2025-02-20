@@ -31,33 +31,25 @@ public sealed class AssemblyResolver : IDisposable
 		}
 		var requestedName = new AssemblyName(args.Name);
 
-		foreach (var resource in resources is null
+		foreach (var resourceName in resources is null
 			? requester.GetManifestResourceNames()
 			: requester.GetManifestResourceNames().Where(resources.Remove)
 		) {
-			using var stream = requester.GetManifestResourceStream(resource);
-			Assembly? embedAsm = null;
-			try {
-				byte[] buffer = new byte[stream.Length];
-				if (stream.Read(buffer, 0, buffer.Length) is 0) {
-					Plugin.Logger.LogWarning($"skipping {resource} because resource is empty");
-					continue;
-				}
-				embedAsm = Assembly.Load(buffer);
-			} catch (BadImageFormatException) {
-				Plugin.Logger.LogWarning($"skipping {resource} because resource is not a valid assembly");
-				continue;
-			} catch (Exception ex) {
-				Plugin.Logger.LogWarning($"skipping {resource} because {ex}");
+			var resourceAsm = new LocatedAssembly.ResourceAssembly(requester, resourceName);
+			if (!resourceAsm.TryGetAssembly(
+				out var assembly,
+				out Exception? exception
+			)) {
+				Plugin.Logger.LogWarning($"skipping {resourceName} because {exception}");
 				continue;
 			}
-			var embedAsmName = embedAsm.GetName();
-			if (string.Equals(embedAsmName.Name, requestedName.Name,
+			var asmName = assembly.GetName();
+			if (string.Equals(asmName.Name, requestedName.Name,
 				StringComparison.InvariantCultureIgnoreCase)
 			) {
-				Plugin.Logger.LogInfo($"Loading assembly '{embedAsmName}' into the current context");
-				PluginManager.Instance.LoadPlugins(stream);
-				return embedAsm;
+				Plugin.Logger.LogInfo($"Loading assembly '{asmName}' into the current context");
+				PluginManager.Instance.LoadPlugins(resourceAsm);
+				return assembly;
 			}
 		}
 		return null;

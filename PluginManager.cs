@@ -9,26 +9,25 @@ namespace BepInEmbed;
 
 public sealed class PluginManager : MonoBehaviour
 {
-	internal static PluginManager Instantiate() {
-		GameObject obj = new ($"{nameof(PluginManager)}_{DateTime.UtcNow.Ticks}");
-		DontDestroyOnLoad(obj);
-		return obj.AddComponent<PluginManager>();
-	}
-
+	#region instantiation
 	private PluginManager() {
 		if (_instance is not null) {
 			Destroy(this);
 			throw new InvalidOperationException(
-				$"cannot create {nameof(PluginManager)} when an instance already exists"
-			);
+				$"cannot create {nameof(PluginManager)} when an instance already exists");
 		}
 		Plugin.instance.OnUnload += Destroy;
 	}
 
 	private static PluginManager? _instance;
-	internal static PluginManager Instance {
-		get => _instance ??= Instantiate();
+	internal static PluginManager Instance => _instance ??= Instantiate();
+
+	private static PluginManager Instantiate() {
+		GameObject obj = new ($"{nameof(PluginManager)}_{DateTime.UtcNow.Ticks}");
+		DontDestroyOnLoad(obj);
+		return obj.AddComponent<PluginManager>();
 	}
+	#endregion
 
 	private readonly HashSet<string> _guids = [];
 
@@ -46,52 +45,21 @@ public sealed class PluginManager : MonoBehaviour
 		foreach (var guid in _guids) RemovePlugin(guid);
 	}
 
-	public void LoadPlugins(Assembly source) {
-		foreach (var name in source.GetManifestResourceNames()) {
-			using Stream resource = source.GetManifestResourceStream(name);
-			if (resource is null) continue;
-			LoadPlugins(resource);
-		}
-	}
-
-	public List<PluginGuid> LoadPlugins(string path) {
-		try {
-			using var asmDef = AssemblyDefinition.ReadAssembly(path);
-			return LoadPlugins(asmDef);
-		} catch (Exception ex) {
-			Plugin.Logger.LogWarning($"error loading resource from path {path}: {ex.Message}");
+	public List<PluginGuid> LoadPlugins(ILocatedAssemblySafe assembly) {
+		if (!assembly.TryGetAssemblyDef(
+			out var definition,
+			out Exception? ex
+		)) {
+			Plugin.Logger.LogWarning(
+				$"error while converting assembly before loading plugins: {ex}");
 			return [];
 		}
-	}
 
-	public List<PluginGuid> LoadPlugins(Stream resource) {
-		try {
-			using var asmDef = AssemblyDefinition.ReadAssembly(resource)
-				?? throw new InvalidOperationException(
-					$"Cannot load assemblyDefinition from {nameof(resource)}");
-			return LoadPlugins(asmDef);
-		} catch (Exception ex) {
-			Plugin.Logger.LogWarning($"error loading resource {resource}: {ex.Message}");
-			return [];
-		}
-	}
+		Plugin.Logger.LogInfo($"Looking for plugins to load from assembly {definition.Name}");
 
-	public List<PluginGuid> LoadPlugins(AssemblyDefinition asmDef) {
-		Assembly? asm = null;
-		Plugin.Logger.LogInfo($"Looking for plugins to load from assembly {asmDef.Name}");
-		asmDef.Name.Name += $"_{DateTime.UtcNow.Ticks}";
-		using (var ms = new MemoryStream()) {
-			asmDef.Write(ms);
-			asm = Assembly.Load(ms.ToArray());
-		}
-
-		if (asm is null) throw new InvalidOperationException(
-			$"cannot load assembly from {asmDef}");
-
-		Plugin.Logger.LogInfo($"assembly key: {asm.GetName().GetPublicKeyToken().Aggregate("", (acc, cur) => acc + cur.ToString())}");
-
-		return GetTypesSafe(asm)
-			.Select(type => LoadPlugin(type, asmDef))
+		definition.Name.Name += $"_{DateTime.UtcNow.Ticks}";
+		return GetTypes(definition)
+			.Select(type => LoadPlugin(type, definition))
 			.Where(guid => guid is not null)
 			.Select(guid => {
 				_guids.Add(guid!);
@@ -99,17 +67,17 @@ public sealed class PluginManager : MonoBehaviour
 			})
 			.ToList();
 	}
-	
-	private IEnumerable<Type> GetTypesSafe(Assembly ass) {
+
+	private static IEnumerable<Type> GetTypes(AssemblyDefinition definition) {
+		using var ms = new MemoryStream();
+		definition.Write(ms);
+		Assembly asm = Assembly.Load(ms.ToArray()) ?? 
+			throw new InvalidOperationException($"cannot load assembly from {definition}");
 		try {
-			return ass.GetTypes();
-		} catch (ReflectionTypeLoadException ex) {
-			Plugin.Logger.LogError($"""
-				LoaderExceptions: {ex.LoaderExceptions.Select(ex => "\r\n" + ex)}
-				StackTrace: 
-				{ex.StackTrace}
-				""");
-			return ex.Types.Where(x => x is not null);
+			return asm.GetTypes();
+		} catch (ReflectionTypeLoadException typeEx) {
+			Plugin.Logger.LogError(typeEx);
+			return typeEx.Types.Where(x => x is not null);
 		}
 	}
 
@@ -131,7 +99,7 @@ public sealed class PluginManager : MonoBehaviour
 			var typeDef = asmDef.MainModule.Types.First(x => x.FullName == type.FullName);
 			var pluginInfo = Chainloader.ToPluginInfo(typeDef);
 			
-			StartCoroutine(CreatePlugin(type, metadata, pluginInfo));
+			StartCoroutine(InstantiatePlugin(type, metadata, pluginInfo));
 
 			return metadata.GUID;
 		} catch (Exception ex) {
@@ -140,7 +108,7 @@ public sealed class PluginManager : MonoBehaviour
 		}
 	}
 	
-	private IEnumerator CreatePlugin(
+	private IEnumerator InstantiatePlugin(
 		Type type,
 		BepInPlugin metadata,
 		BepInEx.PluginInfo pluginInfo

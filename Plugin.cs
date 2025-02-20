@@ -1,15 +1,12 @@
 
 global using UnityEngine;
 global using Object = UnityEngine.Object;
-using System.ComponentModel.Design.Serialization;
-using System.Diagnostics;
 using BepInEx;
 using BepInEx.Logging;
 
 namespace BepInEmbed;
 
 [BepInPlugin(GUID, NAME, PluginInfo.PLUGIN_VERSION)]
-[BepInProcess("Human.exe")]
 public sealed class Plugin : BaseUnityPlugin
 {
     public const string NAME = $"{nameof(BepInEmbed)}";
@@ -35,8 +32,8 @@ public sealed class Plugin : BaseUnityPlugin
 	private void Update() {
 		if (Input.GetKeyDown(KeyCode.RightShift)) {
 			_testPlugin?.ForEach(plugin => plugin.Unload());
-			_testPlugin = PluginManager.Instance.LoadPlugins(path: 
-				@"C:\Program Files (x86)\Steam\steamapps\common\Human Fall Flat\BepInEx\scripts\HFFCatCore.CPReversed.dll");
+			_testPlugin = PluginManager.Instance.LoadPlugins(new LocatedAssembly.FileAssembly(
+				@"C:\Program Files (x86)\Steam\steamapps\common\Human Fall Flat\BepInEx\scripts\HFFCatCore.CPReversed.dll"));
 		}
 	}
 
