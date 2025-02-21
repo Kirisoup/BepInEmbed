@@ -17,7 +17,7 @@
 		<DefineConstants Condition="'$(Configuration)' == 'Release'">RELEASE</DefineConstants>
 	</PropertyGroup>
 
-	<Import Project="..\..\tasks\DeployToGame.target" 
+	<Import Project="..\..\tasks\DeployToGameStatic.target" 
 		Condition=" '$(Configuration)' == 'Debug' "/>
 
 	<ItemGroup>

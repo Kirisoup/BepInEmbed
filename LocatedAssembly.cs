@@ -56,7 +56,7 @@ public static class AssemblyConvert
 		}
 
 		public AssemblyDefinition GetCecilAssembly() {
-			using var stream = Container.GetManifestResourceStream(Name);
+			var stream = Container.GetManifestResourceStream(Name);
 			return AssemblyDefinition.ReadAssembly(stream);
 		}
 

@@ -67,42 +67,46 @@ public sealed class AssemblyResolver : IDisposable
 		) {
 			var resourceAsm = new AssemblyConvert.ResourceAssembly(requester, resourceName);
 			if (!resourceAsm.TryGetCecilAssembly(
-				out var assembly,
+				out var definition_,
 				out Exception? exception
 			)) {
 				Plugin.Logger.LogWarning($"skipping {resourceName} because {exception}");
 				return null;
 			}
-			try {
-				if (!string.Equals(assembly.Name.Name, requestedName.Name,
-					StringComparison.InvariantCultureIgnoreCase)) return null;
+			using var definition = definition_;
 
-				Plugin.Logger.LogInfo($"Loading assembly '{assembly.Name}' into the current context");
+			if (!string.Equals(definition.Name.Name, requestedName.Name,
+				StringComparison.InvariantCultureIgnoreCase)) return null;
 
-				long tick = DateTime.UtcNow.Ticks;
-				string name = assembly.Name.Name;
-				var plugins = PluginManager.Instance.LoadPlugins(assembly);
+			Plugin.Logger.LogInfo($"Loading assembly '{definition.Name}' into the current context 11");
 
-				// assembly.Name.Name = namePrefix + name;
+			long tick = DateTime.UtcNow.Ticks;
+			string name = definition.Name.Name;
 
-				Assembly requested;
-				using (var ms = new MemoryStream()) {
-					assembly.Write(ms);
-					requested = Assembly.Load(ms.ToArray());
+			definition.Name.Name = namePrefix + name;
+
+			Assembly assembly;
+			using (var ms = new MemoryStream()) {
+				try {
+					definition.Write(ms);
+				} catch (Exception ex) {
+					Plugin.Logger.LogInfo(ex);
+					continue;
 				}
-
-				ResolvedAssemblyInfo value = new(
-					tick,
-					requested!,
-					requester,
-					plugins);
-
-				_requestMap.Add(name, value);
-
-				return requested;
-			} finally {
-				assembly.Dispose();
+				var bytes = ms?.ToArray();
+				assembly = Assembly.Load(bytes);
 			}
+			var plugins = PluginManager.Instance.LoadPlugins(assembly, definition);
+
+			ResolvedAssemblyInfo value = new(
+				tick,
+				assembly!,
+				requester,
+				plugins);
+			Plugin.Logger.LogInfo($"Saving assembly info {value}");
+
+			_requestMap.Add(name, value);
+			return assembly;
 		}
 		return null;
 	}

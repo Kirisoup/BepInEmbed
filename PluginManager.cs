@@ -46,11 +46,25 @@ public sealed class PluginManager : MonoBehaviour
 		foreach (var guid in _guids) RemovePlugin(guid);
 	}
 
-	internal List<PluginGuid> LoadPlugins(AssemblyDefinition definition) {
+
+	internal List<PluginGuid> LoadPlugins(
+		Assembly assembly,
+		AssemblyDefinition definition
+	) {
 		Plugin.Logger.LogInfo($"Looking for plugins to load from assembly {definition.Name}");
 
-		// definition.Name.Name += $"_{DateTime.UtcNow.Ticks}";
-		return GetTypes(definition)
+		if (assembly is null) {
+			using var ms = new MemoryStream();
+			try {
+				definition.Write(ms);
+			} catch (Exception ex) {
+				Plugin.Logger.LogInfo(ex);
+				return [];
+			}
+			assembly = Assembly.Load(ms.ToArray());
+		}
+
+		return GetTypes(assembly)
 			.Select(type => LoadPlugin(type, definition))
 			.Where(guid => guid is not null)
 			.Select(guid => {
@@ -59,19 +73,12 @@ public sealed class PluginManager : MonoBehaviour
 			})
 			.ToList();
 	
-		static IEnumerable<Type> GetTypes(AssemblyDefinition definition) {
+		static IEnumerable<Type> GetTypes(Assembly asm) {
 			try {
-				using var ms = new MemoryStream();
-				definition.Write(ms);
-				Assembly asm = Assembly.Load(ms.ToArray()) ?? 
-					throw new InvalidOperationException($"cannot load assembly from {definition}");
-					return asm.GetTypes();
+				return asm.GetTypes();
 			} catch (ReflectionTypeLoadException typeEx) {
 				Plugin.Logger.LogError(typeEx);
 				return typeEx.Types.Where(x => x is not null);
-			} catch (Exception ex) {
-				Plugin.Logger.LogError($"Failed to write definition to assembly because {ex}");
-				return [];
 			}
 		}
 	}
@@ -87,7 +94,7 @@ public sealed class PluginManager : MonoBehaviour
 			return [];
 		}
 		try {
-			return LoadPlugins(definition);
+			return LoadPlugins(assembly.GetSysAssembly(), definition);
 		}
 		finally {
 			definition.Dispose();
