@@ -1,8 +1,13 @@
 
 global using UnityEngine;
 global using Object = UnityEngine.Object;
+using System.Reflection;
+using System.Runtime.Serialization.Formatters.Binary;
 using BepInEx;
 using BepInEx.Logging;
+using SoupCommonLib;
+
+[assembly: BepInEmbed.UseEmbed()]
 
 namespace BepInEmbed;
 
@@ -24,15 +29,12 @@ public sealed class Plugin : BaseUnityPlugin
 		Logger ??= base.Logger;
 	}
 
-	private void Awake() {
-	}
-
 	private List<PluginGuid>? _testPlugin;
 
 	private void Update() {
 		if (Input.GetKeyDown(KeyCode.RightShift)) {
 			_testPlugin?.ForEach(plugin => plugin.Unload());
-			_testPlugin = PluginManager.Instance.LoadPlugins(new LocatedAssembly.FileAssembly(
+			_testPlugin = PluginManager.Instance.LoadPlugins(new AssemblyConvert.FileAssembly(
 				@"C:\Program Files (x86)\Steam\steamapps\common\Human Fall Flat\BepInEx\scripts\HFFCatCore.CPReversed.dll"));
 		}
 	}
@@ -42,12 +44,4 @@ public sealed class Plugin : BaseUnityPlugin
 		_resolver = null;
 		OnUnload?.Invoke();
 	}
-}
-
-[AttributeUsage(AttributeTargets.Assembly, AllowMultiple = false)]
-public class ResolveFromResourcesAttribute : Attribute
-{
-	public HashSet<string>? ResourceNames { get; } = null;
-
-	// public bool 
 }

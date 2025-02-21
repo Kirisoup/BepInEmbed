@@ -8,6 +8,8 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
 		<RootNamespace>$(MSBuildProjectName)</RootNamespace>
     	<AssemblyName>$(RootNamespace)</AssemblyName>
 
@@ -19,6 +21,12 @@
 		Condition=" '$(Configuration)' == 'Debug' "/>
 
 	<ItemGroup>
+		<ProjectReference Include="..\SoupCommonLib\SoupCommonLib.csproj" />
+		<EmbeddedResource Include="..\SoupCommonLib\obj\Debug\net48\SoupCommonLib.dll"
+			Condition="'$(Configuration)' == 'Debug'" />
+		<EmbeddedResource Include="..\SoupCommonLib\bin\Release\net48\SoupCommonLib.dll"
+			Condition="'$(Configuration)' == 'Release'" />
+
 		<PackageReference Include="PolySharp" Version="1.15.0" 
 			PrivateAssets="all" 
 			IncludeAssets="runtime; build; native; contentfiles; analyzers" />
