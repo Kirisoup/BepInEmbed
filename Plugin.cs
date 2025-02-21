@@ -1,11 +1,12 @@
-
+global using KiriLib.LinqBackport;
+global using KiriLib.ErrorHandling;
 global using UnityEngine;
 global using Object = UnityEngine.Object;
 using System.Reflection;
 using System.Runtime.Serialization.Formatters.Binary;
 using BepInEx;
 using BepInEx.Logging;
-using SoupCommonLib;
+// using SoupCommonLib;
 
 [assembly: BepInEmbed.UseEmbed()]
 
@@ -22,26 +23,54 @@ public sealed class Plugin : BaseUnityPlugin
     internal static new ManualLogSource Logger = null!;
 
 	internal event Action? OnUnload;
-	private AssemblyResolver? _resolver = new(); 
+
+	private static readonly string[] _dependencies = [
+		$"{nameof(KiriLib)}.{nameof(KiriLib.LinqBackport)}",
+		$"{nameof(KiriLib)}.{nameof(KiriLib.ErrorHandling)}",
+	];
+
+	private DependencyResolver _resolver = null!;
 
 	private Plugin() {
 		instance ??= this;
 		Logger ??= base.Logger;
 	}
 
+	
+
+	private void Awake() {
+		LoadDependencies();
+		_resolver = new();
+		_0();
+	}
+
+	private void LoadDependencies() {
+		var source = Assembly.GetExecutingAssembly();
+		foreach (var name in _dependencies) {
+			try {
+				using var stream = source.GetManifestResourceStream($"{nameof(BepInEmbed)}.{name}.dll");
+				using var memoryStream = new MemoryStream();
+				stream.CopyTo(memoryStream);
+				Logger.LogInfo(AppDomain.CurrentDomain.Load(memoryStream.ToArray()));
+			} catch (Exception ex) {
+				Logger.LogError($"failed to load {name} because {ex}");
+			}
+		}
+	}
+
+	private void _0() => Logger.LogInfo(Result.Ok(1));
+
 	private List<PluginGuid>? _testPlugin;
 
 	private void Update() {
 		if (Input.GetKeyDown(KeyCode.RightShift)) {
 			_testPlugin?.ForEach(plugin => plugin.Unload());
-			_testPlugin = PluginManager.Instance.LoadPlugins(new AssemblyConvert.FileAssembly(
+			_testPlugin = PluginManager.Instance.LoadPlugins(new AssemblyConvert.File(
 				@"C:\Program Files (x86)\Steam\steamapps\common\Human Fall Flat\BepInEx\scripts\HFFCatCore.CPReversed.dll"));
 		}
 	}
 
 	private void OnDestroy() {
-		_resolver?.Dispose();
-		_resolver = null;
 		OnUnload?.Invoke();
 	}
 }

@@ -1,104 +1,128 @@
 using System.Reflection;
-// using Mono.Cecil;
-using SoupCommonLib;
-using Definition = Mono.Cecil.AssemblyDefinition;
+using System.Security.Cryptography;
+using Mono.Cecil;
 
 namespace BepInEmbed;
+using Definition = AssemblyDefinition;
+using Both = (Assembly assembly, AssemblyDefinition definition);
 
 public interface IAssemblyConvert
 {
-	Assembly? GetAssembly();
-	Definition? GetDefinition();
-	(Assembly, Definition)? GetBoth();
-	IAssemblyConvert? Map(Func<Definition, Definition> f);
+	Result<Assembly, Exception> GetAssembly();
+	Result<Definition, Exception> GetDefinition();
+	Result<Both, Exception> GetBoth();
+	Result<IAssemblyConvert, Exception> Map(Func<Definition, Definition> f);
 }
+
+// public interface IAssemblyConvert
+// {
+// 	Assembly? GetAssembly();
+// 	Definition? GetDefinition();
+// 	(Assembly, Definition)? GetBoth();
+// 	IAssemblyConvert? Map(Func<Definition, Definition> f);
+// }
 
 public static class AssemblyConvert
 {
-	public readonly record struct CecilAssembly(Definition Definition) : IAssemblyConvert
+	public readonly record struct Definition(AssemblyDefinition AsmDefinition) : IAssemblyConvert
 	{
-		public Definition? GetDefinition() => Definition;
+		public Result<AssemblyDefinition, Exception> GetDefinition() => Result.Ok(AsmDefinition);
 
-		public Assembly? GetAssembly() {
+		public Result<Assembly, Exception> GetAssembly() {
 			try {
 				using var ms = new MemoryStream();
-				Definition.Write(ms);
-				return Assembly.Load(ms?.ToArray());
-			} catch {
-				return null;
+				AsmDefinition.Write(ms);
+				return Result.Ok(Assembly.Load(ms?.ToArray()));
+			} catch (Exception ex) {
+				return Result.Ex(ex);
 			}
 		}
 
-		public (Assembly, Definition)? GetBoth() => 
-			GetAssembly() is Assembly assembly 
-				? (assembly, Definition) 
-				: null;
+		public Result<Both, Exception> GetBoth() => GetAssembly() switch {
+			(Assembly assembly, _) => Result.Ok((assembly, AsmDefinition)),
+			(_, Exception ex) => Result.Ex(ex),
+			_ => default
+		};
 
-		public IAssemblyConvert? Map(Func<Definition, Definition> f) =>
-			new CecilAssembly(f(Definition));
+		public Result<IAssemblyConvert, Exception> Map(Func<AssemblyDefinition, AssemblyDefinition> f) =>
+			Result.Ok<IAssemblyConvert>(new Definition(f(AsmDefinition)));
 	}
 
-	public readonly record struct FileAssembly(string Path) : IAssemblyConvert
+	public readonly record struct File(string Path) : IAssemblyConvert
 	{
-		public Assembly? GetAssembly() {
+		public Result<Assembly, Exception> GetAssembly() {
 			try {
-				return Assembly.LoadFrom(Path);
-			} catch {
-				return null;
+				return Result.Ok(Assembly.LoadFrom(Path));
+			} catch (Exception ex) {
+				return Result.Ex(ex);
 			}
 		}
 
-		public Definition? GetDefinition() {
+		public Result<AssemblyDefinition, Exception> GetDefinition() {
 			try {
-				return Definition.ReadAssembly(Path);
-			} catch {
-				return null;
+				return Result.Ok(AssemblyDefinition.ReadAssembly(Path));
+			} catch (Exception ex) {
+				return Result.Ex(ex);
 			}
 		}
 
-		public (Assembly, Definition)? GetBoth() => 
-			(GetAssembly(), GetDefinition()) is (Assembly, Definition) both
-				? both!
-				: null;
+		public Result<Both, Exception> GetBoth() => 
+			(GetAssembly(), GetDefinition()) switch {
+				((Assembly assembly, _), (AssemblyDefinition definition, _)) =>
+					Result.Ok((assembly, definition)),
+				((_, Exception ex), _) => Result.Ex(ex),
+				(_, (_, Exception ex)) => Result.Ex(ex),
+				_ => default
+			};
 
-		public IAssemblyConvert? Map(Func<Definition, Definition> f) => 
-			GetDefinition() is Definition definition
-				? new CecilAssembly(f(definition))
-				: null;
+		public Result<IAssemblyConvert, Exception> Map(Func<AssemblyDefinition, AssemblyDefinition> f) =>
+			GetDefinition() switch {
+				(AssemblyDefinition definition, _) =>
+					Result.Ok<IAssemblyConvert>(new Definition(f(definition))),
+				(_, Exception ex) => Result.Ex(ex),
+				_ => default
+			};
 	}
 
-	public readonly record struct ResourceAssembly(
-		Assembly Container, 
+	public readonly record struct Resource(
+		Assembly Source, 
 		string ResourceName) : IAssemblyConvert
 	{
-		public Assembly? GetAssembly() {
+		public Result<Assembly, Exception> GetAssembly() {
 			try {
-				using var stream = Container.GetManifestResourceStream(ResourceName);
+				using var stream = Source.GetManifestResourceStream(ResourceName);
 				using var memoryStream = new MemoryStream();
 				stream.CopyTo(memoryStream);
-				return Assembly.Load(memoryStream.ToArray());
-			} catch {
-				return null;
+				return Result.Ok(Assembly.Load(memoryStream.ToArray()));
+			} catch (Exception ex) {
+				return Result.Ex(ex);
 			}
 		}
 
-		public Definition? GetDefinition() {
+		public Result<AssemblyDefinition, Exception> GetDefinition() {
 			try {
-				var stream = Container.GetManifestResourceStream(ResourceName);
-				return Definition.ReadAssembly(stream);
-			} catch {
-				return null;
+				var stream = Source.GetManifestResourceStream(ResourceName);
+				return Result.Ok(AssemblyDefinition.ReadAssembly(stream));
+			} catch (Exception ex) {
+				return Result.Ex(ex);
 			}
 		}
 
-		public (Assembly, Definition)? GetBoth() => 
-			(GetAssembly(), GetDefinition()) is (Assembly, Definition) both
-				? both!
-				: null;
+		public Result<Both, Exception> GetBoth() => 
+			(GetAssembly(), GetDefinition()) switch {
+				((Assembly assembly, _), (AssemblyDefinition definition, _)) =>
+					Result.Ok((assembly, definition)),
+				((_, Exception ex), _) => Result.Ex(ex),
+				(_, (_, Exception ex)) => Result.Ex(ex),
+				_ => default
+			};
 
-		public IAssemblyConvert? Map(Func<Definition, Definition> f) => 
-			GetDefinition() is Definition definition
-				? new CecilAssembly(f(definition))
-				: null;
+		public Result<IAssemblyConvert, Exception> Map(Func<AssemblyDefinition, AssemblyDefinition> f) =>
+			GetDefinition() switch {
+				(AssemblyDefinition definition, _) =>
+					Result.Ok<IAssemblyConvert>(new Definition(f(definition))),
+				(_, Exception ex) => Result.Ex(ex),
+				_ => default
+			};
 	}
 }

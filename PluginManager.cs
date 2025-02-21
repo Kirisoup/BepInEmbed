@@ -4,7 +4,7 @@ using Mono.Cecil;
 using BepInEx;
 using BepInEx.Bootstrap;
 using HarmonyLib;
-using SoupCommonLib;
+// using SoupCommonLib;
 
 namespace BepInEmbed;
 
@@ -85,10 +85,10 @@ public sealed class PluginManager : MonoBehaviour
 
 	public List<PluginGuid> LoadPlugins(IAssemblyConvert convert) => LoadPlugins(convert, out _);
 	internal List<PluginGuid> LoadPlugins(IAssemblyConvert convert, out Assembly? assembly) {
-		var both = convert.GetBoth();
+		(var both, var ex) = convert.GetBoth();
 		if (both is null) {
 			Plugin.Logger.LogWarning(
-				$"error while converting assembly before loading plugins");
+				$"error while converting assembly before loading plugins {ex}");
 			assembly = null;
 			return [];
 		}
