@@ -8,8 +8,6 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 
-		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-
 		<RootNamespace>$(MSBuildProjectName)</RootNamespace>
     	<AssemblyName>$(RootNamespace)</AssemblyName>
 
@@ -17,15 +15,20 @@
 		<DefineConstants Condition="'$(Configuration)' == 'Release'">RELEASE</DefineConstants>
 	</PropertyGroup>
 
-	<Import Project="..\..\tasks\DeployToGameStatic.target" 
+	<Import Project="..\_task\Human.Deploy.target" 
 		Condition=" '$(Configuration)' == 'Debug' "/>
 
 	<ItemGroup>
+		<Compile Remove="RuntimeAssemblyAttributes\**" />
+		<ProjectReference Include="RuntimeAssemblyAttributes\RuntimeAssemblyAttributes.csproj" />
+		<EmbeddedResource Include="RuntimeAssemblyAttributes\bin\$(Configuration)\$(TargetFramework)\BepInEmbed.RuntimeAssemblyAttributes.dll" 
+			LogicalName="BepInEmbed.BepInEmbed.RuntimeAssemblyAttributes.dll" />
+
 		<PackageReference Include="KiriLib.LinqBackport" Version="*"/>
-		<EmbeddedResource Include="..\..\..\_pkgs\$(TargetFramework)\KiriLib.LinqBackport.dll" />
+		<EmbeddedResource Include="..\_pkgs\$(TargetFramework)\KiriLib.LinqBackport.dll" />
 
 		<PackageReference Include="KiriLib.ErrorHandling" Version="*" />
-		<EmbeddedResource Include="..\..\..\_pkgs\$(TargetFramework)\KiriLib.ErrorHandling.dll" />
+		<EmbeddedResource Include="..\_pkgs\$(TargetFramework)\KiriLib.ErrorHandling.dll" />
 
 		<PackageReference Include="PolySharp" Version="1.15.0" 
 			PrivateAssets="all" 

@@ -14,14 +14,6 @@ public interface IAssemblyConvert
 	Result<IAssemblyConvert, Exception> Map(Func<Definition, Definition> f);
 }
 
-// public interface IAssemblyConvert
-// {
-// 	Assembly? GetAssembly();
-// 	Definition? GetDefinition();
-// 	(Assembly, Definition)? GetBoth();
-// 	IAssemblyConvert? Map(Func<Definition, Definition> f);
-// }
-
 public static class AssemblyConvert
 {
 	public readonly record struct Definition(AssemblyDefinition AsmDefinition) : IAssemblyConvert

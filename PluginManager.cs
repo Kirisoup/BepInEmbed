@@ -92,8 +92,8 @@ public sealed class PluginManager : MonoBehaviour
 			assembly = null;
 			return [];
 		}
-		assembly = both.Value.Item1;
-		using var definition = both.Value.Item2;
+		assembly = both.Value.assembly;
+		using var definition = both.Value.definition;
 		return LoadPlugins(assembly, definition);
 	}
 
@@ -113,13 +113,12 @@ public sealed class PluginManager : MonoBehaviour
 				return null;
 			}
 
-			Plugin.Logger.LogInfo($"Loading {metadata.GUID}");
+			Plugin.Logger.LogInfo($"Loading plugin {metadata.GUID}");
 
-			var typeDef = asmDef.MainModule.Types.First(x => x.FullName == type.FullName);
-			var pluginInfo = Chainloader.ToPluginInfo(typeDef);
+			var pluginInfo = Chainloader.ToPluginInfo(asmDef.MainModule.Types
+				.First(x => x.FullName == type.FullName));
 			
 			StartCoroutine(InstantiatePlugin(type, metadata, pluginInfo));
-
 			return metadata.GUID;
 		} catch (Exception ex) {
 			Plugin.Logger.LogError($"Failed to load plugin of type {type.Name} because of exception: {ex}");

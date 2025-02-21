@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using Mono.Cecil;
 
@@ -7,6 +6,27 @@ namespace BepInEmbed;
 internal sealed class DependencyResolver : IDisposable
 {
 	const string namePrefix = @$"__{nameof(BepInEmbed)}__";
+
+	static DependencyResolver() {
+		string asmName = $"{nameof(BepInEmbed)}.{nameof(BepInEmbed)}.{nameof(RuntimeAssemblyAttributes)}.dll";
+		string typeName = typeof(RuntimeAssemblyAttributes.BepInEmbedResolvedAttribute).FullName;
+		var resource = new AssemblyConvert.Resource(
+			Assembly.GetExecutingAssembly(),
+			asmName);
+		(var value, var ex) = resource.GetDefinition();
+		if (value is null) {
+			Plugin.Logger.LogWarning($"{asmName} not found because {ex}");
+			throw ex!;
+		}
+		using var assembly = value;
+		_resolvedAttributeCtor = assembly.MainModule
+			.Types
+			.First(x => x.FullName == typeName)
+			.Methods
+			.First(m => m.Name == ".ctor");
+	}
+
+	private static readonly MethodReference _resolvedAttributeCtor;
 
 	public DependencyResolver() {
 		AppDomain.CurrentDomain.AssemblyResolve += ResolveAssembly;
@@ -19,15 +39,8 @@ internal sealed class DependencyResolver : IDisposable
 		AppDomain.CurrentDomain.AssemblyResolve -= ResolveAssembly;
 	}
 
-	readonly Dictionary<string, ResolvedDependency> _requestMap = [];
 	bool _disposed;
-
-	public record struct ResolvedDependency(
-		long Tick,
-		string Name,
-		Assembly Assembly,
-		Assembly RequestingAssembly,
-		List<PluginGuid> Plugins);
+	readonly Dictionary<string, Assembly> _requesters = [];
 
 	private Assembly? ResolveAssembly(object sender, ResolveEventArgs args)
 	{
@@ -36,139 +49,96 @@ internal sealed class DependencyResolver : IDisposable
 
 		if (args?.Name is null) return null;
 
-		var requestedName = new AssemblyName(args.Name);
+		var request = new AssemblyName(args.Name);
 
-		var requester = args.RequestingAssembly;
-		if (requester is null) {
-			Plugin.Logger.LogWarning($"a null {nameof(args.RequestingAssembly)} is trying to request {requestedName}");
+		var source = args.RequestingAssembly;
+		if (source is null) {
+			Plugin.Logger.LogWarning($"a null {nameof(args.RequestingAssembly)} is trying to request {request}");
 			return null;
 		}
 
-		if (_requestMap.TryGetValue(requestedName.Name, out var info)) {
-			Plugin.Logger.LogInfo($"request {requestedName} exists in _requestMap");
-			return info.Assembly;
-		}
+		if (ResolveResource(source, request) is Assembly result) return result;
 
-		if (!(requester.GetCustomAttribute<UseEmbedAttribute>() is {
-			ResourceFilter: var resourceFilter,
-			ResourceMap: var resourceMap
-		})) {
+		if (!(source
+			.GetCustomAttribute<RuntimeAssemblyAttributes.BepInEmbedResolvedAttribute>()
+			is { Requester: var parentName } &&
+			_requesters.TryGetValue(parentName, out var parent))
+		) {
 			return null;
 		}
 
-		ResolvedDependency? resolved = resourceMap is null 
-			? null
-			: FindDependencyExplicit(requester, requestedName.Name, resourceMap); 
-
-		if (resolved is null) {
-			List<string> resources = resourceFilter is not null
-				? [.. requester.GetManifestResourceNames().Where(resourceFilter.Contains)]
-				: [.. requester.GetManifestResourceNames()];
-
-			resolved = resources.Contains(requestedName.Name + ".dll")
-				? LoadAssembly(
-					resource: new(requester, requestedName.Name + ".dll"), 
-					requestedName.Name,
-					@unsafe: false)
-				: FindDependency(requester, requestedName.Name, resources);
-
-			if (resolved is null) return null;
-		}
-
-		Plugin.Logger.LogInfo($"Saving assembly info {resolved}");
-
-		_requestMap.Add(resolved.Value.Name, resolved.Value);
-		return resolved.Value.Assembly;
+		Plugin.Logger.LogInfo($"Request from {source.GetName().Name} is resolved from {parentName}");
+		return ResolveResource(parent, request);
 	}
 
-	private static ResolvedDependency? FindDependencyExplicit(
-		Assembly requester,
-		string requestedName,
-		Dictionary<string, string> resourceMap
-	) {
-		if (!resourceMap.TryGetValue(requestedName, out var resourceName)) {
+	private Assembly? ResolveResource(Assembly source, AssemblyName request) 
+	{
+		if (source.GetManifestResourceNames() is []) return null;
+
+		if (source.GetCustomAttribute<UseEmbedAttribute>() is not UseEmbedAttribute attr) {
 			return null;
 		}
+		var sourceName = source.GetName();
 
-		var resource = new AssemblyConvert.Resource(requester, resourceName);
+		var resourceMap = attr.GetResourceMap();
+		var resourceFilter = attr.GetResourceFilter();
 
-		(var value, var ex) = resource.GetDefinition();
+		if (resourceMap?.TryGetValue(request.Name, out var resourceName) is true) {
+			var resolved = LoadAssembly(new(source, resourceName));
+			if (resolved is not null) return resolved;
+		} 
 
-		if (value is null) {
-			Plugin.Logger.LogWarning($"{resourceName} not found because {ex}");
-			return null;
+		List<string> resources = resourceFilter is not null
+			? [.. source.GetManifestResourceNames().Where(resourceFilter.Contains)]
+			: [.. source.GetManifestResourceNames()];
+
+		if (resources.Contains(request.Name + ".dll")) {
+			return LoadAssembly(new(source, request.Name + ".dll"));
 		}
 
-		Plugin.Logger.LogInfo($"Loading assembly {requestedName} into the current context");
+		foreach (var name in resources) {
+			var resource = new AssemblyConvert.Resource(source, name);
+			(var value, var ex) = resource.GetDefinition();
+			if (value is null) {
+				Plugin.Logger.LogWarning($"{name} not found because {ex}");
+				continue;
+			}
+			using var definition = value;
 
-		using var definition = value;
+			if (!string.Equals(definition.Name.Name, request.Name,
+				StringComparison.InvariantCultureIgnoreCase)) continue;
 
-		return LoadAssembly(
-			resource: new(requester, resourceName),
-			requestedName,
-			@unsafe: true);
+			var resolved = LoadAssembly(resource);			
+			if (resolved is not null) return resolved;
+		}
+
+		return null;
+
+		Assembly? LoadAssembly(AssemblyConvert.Resource resource) {
+			(var modified, var ex) = resource.Map(def => {
+				def.Name.Name = namePrefix + def.Name.Name;
+				var ctor = def.MainModule.ImportReference(_resolvedAttributeCtor);
+				var attr = new CustomAttribute(ctor);
+				var arg = new CustomAttributeArgument(
+					def.MainModule.ImportReference(typeof(string)), 
+					sourceName.Name);
+				attr.ConstructorArguments.Add(arg);
+				def.CustomAttributes.Add(attr);
+				return def;
+			})!;
+			if (modified is null) {
+				Plugin.Logger.LogWarning(
+					$"error while modifying assembly {ex}");
+				return null;
+			}
+
+			PluginManager.Instance.LoadPlugins(modified, out var assembly);
+			if (assembly is not null) {
+				Plugin.Logger.LogInfo($"Loading assembly '{assembly.GetName()}' into the current context");
+				_requesters.Add(sourceName.Name, source);
+			}
+			return assembly;
+		}
 	}
 
-	private static ResolvedDependency? FindDependency(
-		Assembly requester,
-		string requestedName,
-		List<string> resources
-	) => resources
-		.Select(resourceName => {
-		var resource = new AssemblyConvert.Resource(requester, resourceName);
-
-		(var value, var ex) = resource.GetDefinition();
-
-		if (value is null) {
-			Plugin.Logger.LogWarning($"{resourceName} not found because {ex}");
-			return null;
-		}
-
-		using var definition = value;
-
-		if (!string.Equals(definition.Name.Name, requestedName,
-			StringComparison.InvariantCultureIgnoreCase)) return null;
-
-		return LoadAssembly(
-			resource: new(requester, resourceName),
-			requestedName,
-			@unsafe: true);
-		})
-		.FirstOrDefault(resolvedDependency => resolvedDependency is not null);
-
-	private static ResolvedDependency? LoadAssembly(
-		AssemblyConvert.Resource resource,
-		string resourceName,
-		bool @unsafe
-	) {
-		(var value, var ex) = resource.GetDefinition();
-
-		if (!@unsafe && value is null) {
-			Plugin.Logger.LogWarning($"{resourceName} not found because {ex}");
-			return null;
-		}
-
-		using var definition = value!;
-
-		Plugin.Logger.LogInfo($"Loading assembly '{definition.Name}' into the current context");
-
-		long tick = DateTime.UtcNow.Ticks;
-		string name = definition.Name.Name;
-
-		(var newAsm, _) = resource.Map(def => {
-			def.Name.Name = namePrefix + def.Name.Name;
-			return def;
-		})!;
-
-		var plugins = PluginManager.Instance.LoadPlugins(newAsm!, out var assembly);
-
-		ResolvedDependency asmInfo = new(
-			tick,
-			name,
-			assembly!,
-			resource.Source,
-			plugins);
-
-		return asmInfo;
-	}
 }

@@ -3,10 +3,8 @@ global using KiriLib.ErrorHandling;
 global using UnityEngine;
 global using Object = UnityEngine.Object;
 using System.Reflection;
-using System.Runtime.Serialization.Formatters.Binary;
 using BepInEx;
 using BepInEx.Logging;
-// using SoupCommonLib;
 
 [assembly: BepInEmbed.UseEmbed()]
 
@@ -27,6 +25,7 @@ public sealed class Plugin : BaseUnityPlugin
 	private static readonly string[] _dependencies = [
 		$"{nameof(KiriLib)}.{nameof(KiriLib.LinqBackport)}",
 		$"{nameof(KiriLib)}.{nameof(KiriLib.ErrorHandling)}",
+		$"{nameof(BepInEmbed)}.{nameof(RuntimeAssemblyAttributes)}",
 	];
 
 	private DependencyResolver _resolver = null!;
@@ -36,12 +35,9 @@ public sealed class Plugin : BaseUnityPlugin
 		Logger ??= base.Logger;
 	}
 
-	
-
 	private void Awake() {
 		LoadDependencies();
 		_resolver = new();
-		_0();
 	}
 
 	private void LoadDependencies() {
@@ -57,8 +53,6 @@ public sealed class Plugin : BaseUnityPlugin
 			}
 		}
 	}
-
-	private void _0() => Logger.LogInfo(Result.Ok(1));
 
 	private List<PluginGuid>? _testPlugin;
 
