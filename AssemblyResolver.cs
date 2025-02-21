@@ -66,14 +66,11 @@ public sealed class AssemblyResolver : IDisposable
 			: requester.GetManifestResourceNames().Where(resources.Contains)
 		) {
 			var resourceAsm = new AssemblyConvert.ResourceAssembly(requester, resourceName);
-			if (!resourceAsm.TryGetCecilAssembly(
-				out var definition_,
-				out Exception? exception
-			)) {
-				Plugin.Logger.LogWarning($"skipping {resourceName} because {exception}");
-				return null;
+			using var definition = resourceAsm.GetDefinition();
+			if (definition is null) {
+				Plugin.Logger.LogWarning($"skipping {resourceName} because definition is null");
+				continue;
 			}
-			using var definition = definition_;
 
 			if (!string.Equals(definition.Name.Name, requestedName.Name,
 				StringComparison.InvariantCultureIgnoreCase)) return null;
@@ -83,26 +80,19 @@ public sealed class AssemblyResolver : IDisposable
 			long tick = DateTime.UtcNow.Ticks;
 			string name = definition.Name.Name;
 
-			definition.Name.Name = namePrefix + name;
+			var newAsm = resourceAsm.Map(def => {
+				def.Name.Name = namePrefix + def.Name.Name;
+				return def;
+			})!;
 
-			Assembly assembly;
-			using (var ms = new MemoryStream()) {
-				try {
-					definition.Write(ms);
-				} catch (Exception ex) {
-					Plugin.Logger.LogInfo(ex);
-					continue;
-				}
-				var bytes = ms?.ToArray();
-				assembly = Assembly.Load(bytes);
-			}
-			var plugins = PluginManager.Instance.LoadPlugins(assembly, definition);
+			var plugins = PluginManager.Instance.LoadPlugins(newAsm, out var assembly);
 
 			ResolvedAssemblyInfo value = new(
 				tick,
 				assembly!,
 				requester,
 				plugins);
+
 			Plugin.Logger.LogInfo($"Saving assembly info {value}");
 
 			_requestMap.Add(name, value);

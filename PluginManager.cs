@@ -83,23 +83,20 @@ public sealed class PluginManager : MonoBehaviour
 		}
 	}
 
-	public List<PluginGuid> LoadPlugins(IAssemblyConvertSafe assembly)
-	{
-		if (!assembly.TryGetCecilAssembly(
-			out var definition,
-			out Exception? ex
-		)) {
+	public List<PluginGuid> LoadPlugins(IAssemblyConvert convert) => LoadPlugins(convert, out _);
+	internal List<PluginGuid> LoadPlugins(IAssemblyConvert convert, out Assembly? assembly) {
+		var both = convert.GetBoth();
+		if (both is null) {
 			Plugin.Logger.LogWarning(
-				$"error while converting assembly before loading plugins: {ex}");
+				$"error while converting assembly before loading plugins");
+			assembly = null;
 			return [];
 		}
-		try {
-			return LoadPlugins(assembly.GetSysAssembly(), definition);
-		}
-		finally {
-			definition.Dispose();
-		}
+		assembly = both.Value.Item1;
+		using var definition = both.Value.Item2;
+		return LoadPlugins(assembly, definition);
 	}
+
 
 	private string? LoadPlugin(Type type, AssemblyDefinition asmDef)
 	{
