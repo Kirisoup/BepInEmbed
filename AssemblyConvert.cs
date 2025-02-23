@@ -11,7 +11,7 @@ public interface IAssemblyConvert
 	Result<Assembly, Exception> GetAssembly();
 	Result<Definition, Exception> GetDefinition();
 	Result<Both, Exception> GetBoth();
-	Result<IAssemblyConvert, Exception> Map(Func<Definition, Definition> f);
+	Result<IAssemblyConvert, Exception> Modify(Func<Definition, Definition> f);
 }
 
 public static class AssemblyConvert
@@ -36,7 +36,7 @@ public static class AssemblyConvert
 			_ => default
 		};
 
-		public Result<IAssemblyConvert, Exception> Map(Func<AssemblyDefinition, AssemblyDefinition> f) =>
+		public Result<IAssemblyConvert, Exception> Modify(Func<AssemblyDefinition, AssemblyDefinition> f) =>
 			Result.Ok<IAssemblyConvert>(new Definition(f(AsmDefinition)));
 	}
 
@@ -67,7 +67,7 @@ public static class AssemblyConvert
 				_ => default
 			};
 
-		public Result<IAssemblyConvert, Exception> Map(Func<AssemblyDefinition, AssemblyDefinition> f) =>
+		public Result<IAssemblyConvert, Exception> Modify(Func<AssemblyDefinition, AssemblyDefinition> f) =>
 			GetDefinition() switch {
 				(AssemblyDefinition definition, _) =>
 					Result.Ok<IAssemblyConvert>(new Definition(f(definition))),
@@ -109,7 +109,7 @@ public static class AssemblyConvert
 				_ => default
 			};
 
-		public Result<IAssemblyConvert, Exception> Map(Func<AssemblyDefinition, AssemblyDefinition> f) =>
+		public Result<IAssemblyConvert, Exception> Modify(Func<AssemblyDefinition, AssemblyDefinition> f) =>
 			GetDefinition() switch {
 				(AssemblyDefinition definition, _) =>
 					Result.Ok<IAssemblyConvert>(new Definition(f(definition))),

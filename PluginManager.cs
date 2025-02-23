@@ -10,7 +10,6 @@ namespace BepInEmbed;
 
 public sealed class PluginManager : MonoBehaviour
 {
-	#region instantiation
 	private PluginManager() {
 		if (_instance is not null) {
 			Destroy(this);
@@ -28,7 +27,6 @@ public sealed class PluginManager : MonoBehaviour
 		DontDestroyOnLoad(obj);
 		return obj.AddComponent<PluginManager>();
 	}
-	#endregion
 
 	private readonly HashSet<string> _guids = [];
 
@@ -46,30 +44,31 @@ public sealed class PluginManager : MonoBehaviour
 		foreach (var guid in _guids) RemovePlugin(guid);
 	}
 
+	// internal Result<List<PluginContext>, Exception> LoadPlugins(
+	// 	IAssemblyConvert convert
+	// ) {
+	// 	// assembly 
+	// }
 
-	internal List<PluginGuid> LoadPlugins(
-		Assembly assembly,
-		AssemblyDefinition definition
-	) {
-		Plugin.Logger.LogInfo($"Looking for plugins to load from assembly {definition.Name}");
-
-		if (assembly is null) {
-			using var ms = new MemoryStream();
+	public Result<List<PluginContext>, Exception> LoadPlugins(IAssemblyConvert convert) => 
+		convert.GetBoth()
+		.Map(both => {
 			try {
-				definition.Write(ms);
-			} catch (Exception ex) {
-				Plugin.Logger.LogInfo(ex);
-				return [];
+				return LoadPlugins(both.assembly, both.definition);
+			} finally {
+				both.definition.Dispose();
 			}
-			assembly = Assembly.Load(ms.ToArray());
-		}
+		});
+
+	internal List<PluginContext> LoadPlugins(Assembly assembly, AssemblyDefinition definition) {
+		Plugin.Logger.LogInfo($"Looking for plugins to load from assembly {definition.Name}");
 
 		return GetTypes(assembly)
 			.Select(type => LoadPlugin(type, definition))
 			.Where(guid => guid is not null)
 			.Select(guid => {
 				_guids.Add(guid!);
-				return new PluginGuid(guid!, this);
+				return new PluginContext(guid!, assembly, this);
 			})
 			.ToList();
 	
@@ -77,26 +76,11 @@ public sealed class PluginManager : MonoBehaviour
 			try {
 				return asm.GetTypes();
 			} catch (ReflectionTypeLoadException typeEx) {
-				Plugin.Logger.LogError(typeEx);
+				Plugin.Logger.LogWarning(typeEx);
 				return typeEx.Types.Where(x => x is not null);
 			}
 		}
 	}
-
-	public List<PluginGuid> LoadPlugins(IAssemblyConvert convert) => LoadPlugins(convert, out _);
-	internal List<PluginGuid> LoadPlugins(IAssemblyConvert convert, out Assembly? assembly) {
-		(var both, var ex) = convert.GetBoth();
-		if (both is null) {
-			Plugin.Logger.LogWarning(
-				$"error while converting assembly before loading plugins {ex}");
-			assembly = null;
-			return [];
-		}
-		assembly = both.Value.assembly;
-		using var definition = both.Value.definition;
-		return LoadPlugins(assembly, definition);
-	}
-
 
 	private string? LoadPlugin(Type type, AssemblyDefinition asmDef)
 	{
@@ -115,13 +99,14 @@ public sealed class PluginManager : MonoBehaviour
 
 			Plugin.Logger.LogInfo($"Loading plugin {metadata.GUID}");
 
-			var pluginInfo = Chainloader.ToPluginInfo(asmDef.MainModule.Types
-				.First(x => x.FullName == type.FullName));
+			var pluginInfo = Chainloader.ToPluginInfo(asmDef.MainModule.GetType(type.FullName));
+
+			// Plugin.Logger.LogInfo(pluginInfo?.Metadata);
 			
 			StartCoroutine(InstantiatePlugin(type, metadata, pluginInfo));
 			return metadata.GUID;
 		} catch (Exception ex) {
-			Plugin.Logger.LogError($"Failed to load plugin of type {type.Name} because of exception: {ex}");
+			Plugin.Logger.LogError($"Failed to load plugin of type {type.FullName} because of exception: {ex}");
 			return null;
 		}
 

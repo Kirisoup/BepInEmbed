@@ -25,7 +25,7 @@ public sealed class Plugin : BaseUnityPlugin
 	private static readonly string[] _dependencies = [
 		$"{nameof(KiriLib)}.{nameof(KiriLib.LinqBackport)}",
 		$"{nameof(KiriLib)}.{nameof(KiriLib.ErrorHandling)}",
-		$"{nameof(BepInEmbed)}.{nameof(RuntimeAssemblyAttributes)}",
+		$"{nameof(BepInEmbed)}.{nameof(BepInEmbed.RuntimeDecorations)}",
 	];
 
 	private DependencyResolver _resolver = null!;
@@ -38,6 +38,7 @@ public sealed class Plugin : BaseUnityPlugin
 	private void Awake() {
 		LoadDependencies();
 		_resolver = new();
+		_ = new InterResourceRequestHandler(_resolver);
 	}
 
 	private void LoadDependencies() {
@@ -54,13 +55,14 @@ public sealed class Plugin : BaseUnityPlugin
 		}
 	}
 
-	private List<PluginGuid>? _testPlugin;
+	private List<PluginContext>? _testPlugin;
 
 	private void Update() {
 		if (Input.GetKeyDown(KeyCode.RightShift)) {
 			_testPlugin?.ForEach(plugin => plugin.Unload());
-			_testPlugin = PluginManager.Instance.LoadPlugins(new AssemblyConvert.File(
-				@"C:\Program Files (x86)\Steam\steamapps\common\Human Fall Flat\BepInEx\scripts\HFFCatCore.CPReversed.dll"));
+			if (PluginManager.Instance.LoadPlugins(new AssemblyConvert.File(
+				@"C:\Program Files (x86)\Steam\steamapps\common\Human Fall Flat\BepInEx\scripts\HFFCatCore.CPReversed.dll"))
+				.IsOk(out var plugins)) _testPlugin = plugins;
 		}
 	}
 

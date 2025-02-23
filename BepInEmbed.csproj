@@ -19,10 +19,10 @@
 		Condition=" '$(Configuration)' == 'Debug' "/>
 
 	<ItemGroup>
-		<Compile Remove="RuntimeAssemblyAttributes\**" />
-		<ProjectReference Include="RuntimeAssemblyAttributes\RuntimeAssemblyAttributes.csproj" />
-		<EmbeddedResource Include="RuntimeAssemblyAttributes\bin\$(Configuration)\$(TargetFramework)\BepInEmbed.RuntimeAssemblyAttributes.dll" 
-			LogicalName="BepInEmbed.BepInEmbed.RuntimeAssemblyAttributes.dll" />
+		<Compile Remove="RuntimeDecorations\**" />
+		<ProjectReference Include="RuntimeDecorations\RuntimeDecorations.csproj" />
+		<EmbeddedResource Include="RuntimeDecorations\bin\$(Configuration)\$(TargetFramework)\BepInEmbed.RuntimeDecorations.dll" 
+			LogicalName="BepInEmbed.BepInEmbed.RuntimeDecorations.dll" />
 
 		<PackageReference Include="KiriLib.LinqBackport" Version="*"/>
 		<EmbeddedResource Include="..\_pkgs\$(TargetFramework)\KiriLib.LinqBackport.dll" />
